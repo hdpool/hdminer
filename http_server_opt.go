@@ -88,13 +88,13 @@ func doProcMinerSubmit() {
 		// 校验dl是否正确
 		use_dl := sub.Deadline / gms.BaseTarget
 		if actor.IsCheckDL() {
-			nonce, _ := strconv.ParseUint(sub.Nonce, 10, 64)
-			testdl := CalcDeadline(uint64(gms.Height), gms.GenerationSignature, accid, nonce)
-			if testdl != uint64(sub.Deadline) {
-				H5Log("SKIP", fmt.Sprintf("height=%d nonce=[%s]%s DL=%d, DL?=%d",
-					sub.Height, sub.AccountId, sub.Nonce, use_dl, testdl/uint64(gms.BaseTarget)))
-				continue
-			}
+			// nonce, _ := strconv.ParseUint(sub.Nonce, 10, 64)
+			// testdl := CalcDeadline(uint64(gms.Height), gms.GenerationSignature, accid, nonce)
+			// if testdl != uint64(sub.Deadline) {
+			// 	H5Log("SKIP", fmt.Sprintf("height=%d nonce=[%s]%s DL=%d, DL?=%d",
+			// 		sub.Height, sub.AccountId, sub.Nonce, use_dl, testdl/uint64(gms.BaseTarget)))
+			// 	continue
+			// }
 		}
 
 		// . 先比较单个miner
