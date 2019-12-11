@@ -30,6 +30,8 @@ var (
 )
 
 func ProcMinerSubmit() {
+	go procLocalSubmit()
+
 	for {
 		doProcMinerSubmit()
 		time.Sleep(time.Second * 5)
@@ -75,7 +77,8 @@ func doProcMinerSubmit() {
 				sub.Coin, gms.MiningCoin, sub.Height, gms.Height)
 			continue
 		}
-		g_submit_ts = time.Now().Unix()
+		t1 := time.Now()
+		g_submit_ts = t1.Unix()
 
 		// 检查plotter_id
 		accid, _ := strconv.ParseUint(sub.AccountId, 10, 64)
@@ -136,33 +139,61 @@ func doProcMinerSubmit() {
 			sub.Height, sub.AccountId, sub.Nonce, sub.Deadline))
 
 		// 发现一个则给client一个本地nonce
-		paraNonce := MinerParaLocalNonce{
-			Nonces: []SubmitInfo{sub.SubmitInfo},
-		}
+		local_submit_ch <- sub.SubmitInfo
+
+		oo.LogD("proc us-ms[%d] %v", time.Now().Sub(t1).Nanoseconds()/1e6, sub)
+	}
+}
+
+var (
+	local_submit_ch = make(chan SubmitInfo, 10240)
+)
+
+func procLocalSubmit() {
+	var arr []SubmitInfo
+
+	for sub := range local_submit_ch {
 		g_chanmgr.PushAllChannelMsg(&oo.RpcMsg{
-			Cmd:  MINER_CMD_LOCAL_NONCE,
-			Para: oo.JsonData(paraNonce),
+			Cmd: MINER_CMD_LOCAL_NONCE,
+			Para: oo.JsonData(MinerParaLocalNonce{
+				Nonces: []SubmitInfo{sub},
+			}),
 		}, nil)
 
+		arr = append(arr, sub)
+
 		// db opt
-		if g_db != nil {
-			err := g_db.AddNonce(sub.SubmitInfo)
-			if err != nil {
-				oo.LogD("Failed to add nonce. err=%v", err)
-				continue
-			}
-			// 是不是最好的100之一
-			n, err := g_db.GetLessCount(sub.Deadline)
-			if err != nil {
-				oo.LogD("Failed to get less count. err=%v", err)
-				continue
-			}
-			if n < 100 /*&& g_chanmgr != nil*/ {
-				g_chanmgr.PushAllChannelMsg(&oo.RpcMsg{
-					Cmd:  MINER_CMD_TOP_NONCE,
-					Para: oo.JsonData(paraNonce),
-				}, nil)
-			}
+		if g_db != nil && 0 == len(local_submit_ch) {
+			brr := make([]SubmitInfo, len(arr))
+			copy(brr, arr)
+
+			// clean
+			arr = []SubmitInfo{}
+
+			go func() {
+				g_db.AddNonceBatch(brr)
+
+				dl := int64(0x7FFFFFFFFFFFFFFF)
+				for _, val := range brr {
+					if val.Deadline <= dl {
+						n, err := g_db.GetLessCount(val.Deadline)
+						if err != nil {
+							oo.LogD("Failed to get less count. err=%v", err)
+							continue
+						}
+						if n < 100 { // 是不是最好的100之一
+							g_chanmgr.PushAllChannelMsg(&oo.RpcMsg{
+								Cmd: MINER_CMD_TOP_NONCE,
+								Para: oo.JsonData(MinerParaLocalNonce{
+									Nonces: []SubmitInfo{val},
+								}),
+							}, nil)
+						} else {
+							dl = val.Deadline
+						}
+					}
+				}
+			}()
 		}
 	}
 }

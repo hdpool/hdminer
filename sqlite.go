@@ -33,6 +33,29 @@ func (db *Sqlite) AddNonce(submit SubmitInfo) (err error) {
 	return err
 }
 
+func (db *Sqlite) AddNonceBatch(arr []SubmitInfo) {
+	var data []map[string]interface{}
+	for _, sub := range arr {
+		data = append(data, map[string]interface{}{
+			"AccountId": sub.AccountId,
+			"Coin":      sub.Coin,
+			"Nonce":     sub.Nonce,
+			"Deadline":  sub.Deadline,
+			"Height":    sub.Height,
+			"Ts":        sub.Ts,
+		})
+	}
+
+	if len(data) > 0 {
+		sql := oo.NewSqler().Table("nonce_table").
+			OrIgnore().
+			InsertBatch(data)
+		if _, err := db.sqldb.Exec(sql); err != nil {
+			oo.LogD("Failed to sql: %s, err=%v", sql, err)
+		}
+	}
+}
+
 func (db *Sqlite) GetLocalNonce(n int64) (sms []SubmitInfo, err error) {
 	sql := oo.NewSqler().Table("nonce_table").Order("id desc").Limit(int(n)).Select("Nonce, COALESCE(Coin,'BHD') Coin, Deadline, AccountId, Height, Ts")
 	err = db.sqldbx.Select(&sms, sql)
@@ -92,7 +115,7 @@ func (db *Sqlite) trySupportCoins() (err error) {
 
 	sql := `
 	alter table nonce_table add Coin varchar(128) NULL; 
-	create index coin_height_idx on nonce_table(Coin, Height);
+	create unique index index_height_nonce on nonce_table(Coin, Height, Nonce);
 	`
 	if _, err = db.sqldb.Exec(sql); err != nil {
 		oo.LogD("Failed to exec sql. err=%v", err)
@@ -113,6 +136,7 @@ func (db *Sqlite) serializedWrite() {
 		}
 	}
 }
+
 func InitSqlite() (*Sqlite, error) {
 	db := &Sqlite{}
 

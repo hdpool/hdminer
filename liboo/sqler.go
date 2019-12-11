@@ -195,6 +195,12 @@ func (dba *Sqler) Ignore() *Sqler {
 	return dba
 }
 
+func (dba *Sqler) OrIgnore() *Sqler {
+	dba.ignore = "or ignore "
+
+	return dba
+}
+
 //------------------------------------------------------------------------------------
 
 // BuildQuery : build query string
